@@ -29,6 +29,11 @@ except ImportError:
 PROJECT_DIR = Path(__file__).resolve().parent
 SEED = 888
 
+CATEGORICAL_LABELS: dict[str, dict[int, str]] = {
+    "Intraoperative BT": {0: "No", 1: "Yes"},
+    "Surgical approach": {0: "Open", 1: "Laparoscopic Minimally Invasive"},
+}
+
 st.set_page_config(
     page_title="Post-Hepatectomy Complication Risk Prediction (Random Forest)",
     page_icon=":hospital:",
@@ -64,6 +69,11 @@ def _single_case_explanation(
         data=case_data[0],
         feature_names=feature_names,
     )
+
+
+def _format_categorical_option(feature: str, option: int) -> str:
+    label_map = CATEGORICAL_LABELS.get(feature, {})
+    return label_map.get(int(option), str(option))
 
 
 @st.cache_resource(show_spinner=False)
@@ -104,7 +114,7 @@ def render_input_form(context: dict[str, Any]) -> tuple[bool, dict[str, float]]:
     user_input: dict[str, float] = {}
 
     st.subheader("Patient Input")
-    st.caption("Categorical features use dropdowns. Numeric features support both slider and manual input.")
+    st.caption("Use dropdowns for categorical fields and direct numeric entry for continuous fields.")
 
     with st.form("predict_form", clear_on_submit=False):
         for feature in assets.model_features:
@@ -114,28 +124,19 @@ def render_input_form(context: dict[str, Any]) -> tuple[bool, dict[str, float]]:
                 default_value = int(round(spec["default"]))
                 default_index = options.index(default_value) if default_value in options else 0
                 selected = st.selectbox(
-                    label=f"{feature} (categorical)",
+                    label=feature,
                     options=options,
                     index=default_index,
-                    help="Choose one value observed in the training dataset.",
+                    format_func=lambda opt, feature_name=feature: _format_categorical_option(feature_name, int(opt)),
                 )
                 user_input[feature] = float(selected)
             else:
-                st.markdown(f"**{feature} (numeric)**")
-                col1, col2 = st.columns([2, 1])
-                slider_value = col1.slider(
-                    label=f"{feature} slider",
-                    min_value=float(spec["slider_min"]),
-                    max_value=float(spec["slider_max"]),
-                    value=float(np.clip(spec["default"], spec["slider_min"], spec["slider_max"])),
-                    step=float(spec["step"]),
-                    key=f"{feature}_slider",
-                )
-                number_value = col2.number_input(
-                    label=f"{feature} value",
+                default_value = float(np.clip(spec["default"], spec["data_min"], spec["data_max"]))
+                number_value = st.number_input(
+                    label=feature,
                     min_value=float(spec["data_min"]),
                     max_value=float(spec["data_max"]),
-                    value=float(slider_value),
+                    value=default_value,
                     step=float(spec["step"]),
                     key=f"{feature}_number",
                 )
